@@ -1,8 +1,16 @@
 from django.http import JsonResponse, HttpResponse
 import requests
 from .models import Genre, Movie, Actor
+from django.shortcuts import get_list_or_404, render
+from .serializer import MovieTitleSerializer
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
 
-API_KEY = 'your-tmdb-api-key'
+
+#==================================
+
+
+API_KEY = '184ad71ecc9874efbe281ead5597e503'
 GENRE_URL = 'https://api.themoviedb.org/3/genre/movie/list'
 POPULAR_MOVIE_URL = 'https://api.themoviedb.org/3/movie/popular'
 
@@ -102,3 +110,63 @@ def tmdb_data(request):
     for i in range(1, 6):
         movie_data(i)
     return HttpResponse('OK >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+
+@api_view(['GET'])
+def movie_list(request):
+    movies = get_list_or_404(Movie)
+    serializer = MovieTitleSerializer(movies, many=True)
+    return Response(serializer.data)
+    
+    
+    
+import pandas as pd 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# from konlpy.tag import Okt
+# okt = Okt()
+
+# def tokenizer(raw_texts, pos=["Noun","Alpha","Verb","Number"], stopword=[]):
+#     p = okt.pos(raw_texts, 
+#             norm=True,   # 정규화(normalization)
+#             stem=True    # 어간추출(stemming)
+#             )
+#     o = [word for word, tag in p if len(word) > 1 and tag in pos and word not in stopword]
+#     return(o)
+
+# 줄거리 유사도로 영화 추천 
+def overview_sim(request):
+    movies = Movie.objects.all().values()
+    data = pd.DataFrame(movies)
+    print(data)
+    data['overview'] = data['overview'].fillna('')
+    print(data.overview)
+    tfidf = TfidfVectorizer()
+    tfidf_matrix = tfidf.fit_transform(data['overview'])
+
+    print(tfidf.vocabulary_)
+    print(tfidf_matrix)
+    print('TF-IDF 행렬의 크기(shape) :',tfidf_matrix.shape)
+    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+    print('코사인 유사도 연산 결과 :',cosine_sim.shape)
+    print(cosine_sim)
+    title_to_index = dict(zip(data['title'], data.index))
+    print(title_to_index)
+
+    #=========================================
+    idx = title_to_index['20세기 소녀']
+    print(idx)
+    sim_scores = list(enumerate(cosine_sim[idx]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    sim_scores = sim_scores[1:11]
+    print(sim_scores)
+    movie_indices = [idx[0] for idx in sim_scores]
+    print(data['title'].iloc[movie_indices])
+
+    
+
+
+    context = {
+        'movies': movies
+    }
+    return Response(context)
